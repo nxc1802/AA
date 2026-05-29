@@ -46,11 +46,11 @@ Image/output*/
 outputs/
 Speech/outputs/
 
-# Keep only the final results in Reports folder
-!Reports/
-!Reports/*.md
-!Reports/*.csv
-!final_grand_results.csv
+# Models, Caches and Temp
+models/
+.cache/
+.tmp/
+results/paper_assets/
 
 # IDEs
 .vscode/
