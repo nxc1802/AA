@@ -40,6 +40,8 @@ Image/data/
 *.gif
 *.log
 *.pdf
+*.pt
+*.csv
 output*/
 Speech/output*/
 Image/output*/

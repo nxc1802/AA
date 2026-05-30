@@ -47,5 +47,3 @@ def topk_pgd_attack(model, images, labels, eps=8/255, alpha=2/255, iters=10, k_r
                 history.append(adv_images.clone().detach())
         
     return (adv_images, history) if return_history else adv_images
-        
-    return adv_images
