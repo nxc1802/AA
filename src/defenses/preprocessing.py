@@ -108,9 +108,23 @@ class RandomizedSmoothingModel(nn.Module):
         
         # Add random isotropic Gaussian noise
         noise = torch.randn_like(x_expanded) * self.sigma
+        x_noisy = x_expanded + noise
         
-        # Forward pass in one single vectorized batch
-        logits = self.model(x_expanded + noise) # [B * N, NumClasses]
+        # To prevent CUDA Out Of Memory on GPUs with limited memory (like 4GB VRAM),
+        # we process the forward pass in smaller chunks.
+        chunk_size = 64
+        total_samples = B * self.N
+        logits_list = []
+        
+        # Use torch.no_grad() if grading is disabled to save VRAM, otherwise forward normally
+        is_grad_enabled = torch.is_grad_enabled()
+        
+        for i in range(0, total_samples, chunk_size):
+            chunk_x = x_noisy[i:i+chunk_size]
+            logits_chunk = self.model(chunk_x)
+            logits_list.append(logits_chunk)
+            
+        logits = torch.cat(logits_list, dim=0)
         
         # Reshape and average predictions across Monte Carlo samples
         logits = logits.view(B, self.N, -1).mean(dim=1)

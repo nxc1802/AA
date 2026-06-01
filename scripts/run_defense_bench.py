@@ -6,6 +6,8 @@ import time
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
 
 # Set cache and temp directories to be inside the workspace
 workspace_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -153,28 +155,29 @@ def run_defense_benchmark(dataset='cifar10', num_batches=2, batch_size=32):
             correct_idx = (clean_preds == labels)
 
         # Apply each defense
-        for def_name, defense_fn in defenses.items():
-            acc_clean, _ = evaluate_defense(model, def_name, defense_fn, images, labels, correct_idx)
-            
-            acc_pgd_d, asr_pgd_d = evaluate_defense(model, def_name, defense_fn, direct_pgd_dict['adv_images'].detach().to(device), labels, correct_idx)
-            acc_sparse_d, asr_sparse_d = evaluate_defense(model, def_name, defense_fn, direct_sparse_dict['adv_images'].detach().to(device), labels, correct_idx)
-            
-            acc_pgd_t, asr_pgd_t = evaluate_defense(model, def_name, defense_fn, transfer_pgd_dict['adv_images'].detach().to(device), labels, correct_idx)
-            acc_sparse_t, asr_sparse_t = evaluate_defense(model, def_name, defense_fn, transfer_sparse_dict['adv_images'].detach().to(device), labels, correct_idx)
-            
-            results_rows.append({
-                "Model": name,
-                "Defense": def_name,
-                "Clean Acc": acc_clean,
-                "PGD Direct Acc": acc_pgd_d,
-                "PGD Direct ASR": asr_pgd_d,
-                "Sparse Direct Acc": acc_sparse_d,
-                "Sparse Direct ASR": asr_sparse_d,
-                "PGD Transfer Acc": acc_pgd_t,
-                "PGD Transfer ASR": asr_pgd_t,
-                "Sparse Transfer Acc": acc_sparse_t,
-                "Sparse Transfer ASR": acc_sparse_t
-            })
+        with torch.no_grad():
+            for def_name, defense_fn in defenses.items():
+                acc_clean, _ = evaluate_defense(model, def_name, defense_fn, images, labels, correct_idx)
+                
+                acc_pgd_d, asr_pgd_d = evaluate_defense(model, def_name, defense_fn, direct_pgd_dict['adv_images'].detach().to(device), labels, correct_idx)
+                acc_sparse_d, asr_sparse_d = evaluate_defense(model, def_name, defense_fn, direct_sparse_dict['adv_images'].detach().to(device), labels, correct_idx)
+                
+                acc_pgd_t, asr_pgd_t = evaluate_defense(model, def_name, defense_fn, transfer_pgd_dict['adv_images'].detach().to(device), labels, correct_idx)
+                acc_sparse_t, asr_sparse_t = evaluate_defense(model, def_name, defense_fn, transfer_sparse_dict['adv_images'].detach().to(device), labels, correct_idx)
+                
+                results_rows.append({
+                    "Model": name,
+                    "Defense": def_name,
+                    "Clean Acc": acc_clean,
+                    "PGD Direct Acc": acc_pgd_d,
+                    "PGD Direct ASR": asr_pgd_d,
+                    "Sparse Direct Acc": acc_sparse_d,
+                    "Sparse Direct ASR": asr_sparse_d,
+                    "PGD Transfer Acc": acc_pgd_t,
+                    "PGD Transfer ASR": asr_pgd_t,
+                    "Sparse Transfer Acc": acc_sparse_t,
+                    "Sparse Transfer ASR": acc_sparse_t
+                })
 
     # 5. Save results to dataset-specific results folders
     dataset_res_dir = os.path.join(workspace_dir, 'results', dataset)

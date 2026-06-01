@@ -1,11 +1,11 @@
-# Comprehensive Robustness Evaluation: CIFAR100 Defenses vs. Sparse Attacks
+# Comprehensive Robustness Evaluation: TINY_IMAGENET Defenses vs. Sparse Attacks
 
 This report evaluates the effectiveness of standard preprocessing, certified, and feature-space defenses using **pre-saved decoupled adversarial images**.
 
 ## 1. Experimental Setup
-- **Dataset**: cifar100
+- **Dataset**: tiny_imagenet
 - **Methodology**: Decoupled attack generation and defense evaluation.
-- **Total Samples Evaluated**: 100 samples.
+- **Total Samples Evaluated**: 1 samples.
 
 ## 2. Evaluation Results
 
@@ -18,7 +18,7 @@ This report evaluates the effectiveness of standard preprocessing, certified, an
 | Bit Reduction (3-bit) | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | JPEG Compression (Q75) | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | Random Noise (std=0.02) | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
-| Randomized Smoothing (std=0.12, N=100) | 1.0% | 1.0% | 0.0% | 1.0% | 0.0% | 1.0% | 0.0% | 1.0% | 1.0% |
+| Randomized Smoothing (std=0.12, N=100) | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | Feature Denoising (3x3 hooks) | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 
 
@@ -26,26 +26,26 @@ This report evaluates the effectiveness of standard preprocessing, certified, an
 
 | Defense | Clean Acc | PGD Direct Acc | PGD Direct ASR | Sparse Direct Acc | Sparse Direct ASR | PGD Transfer Acc | PGD Transfer ASR | Sparse Transfer Acc | Sparse Transfer ASR |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| No Defense | 63.0% | 62.0% | 3.17% | 63.0% | 0.0% | 62.0% | 3.17% | 63.0% | 63.0% |
-| Median Filter (3x3) | 48.0% | 48.0% | 25.4% | 47.0% | 25.4% | 48.0% | 25.4% | 47.0% | 47.0% |
-| Bit Reduction (3-bit) | 60.0% | 54.0% | 14.29% | 60.0% | 4.76% | 54.0% | 14.29% | 60.0% | 60.0% |
-| JPEG Compression (Q75) | 58.0% | 58.0% | 9.52% | 57.0% | 9.52% | 58.0% | 9.52% | 57.0% | 57.0% |
-| Random Noise (std=0.02) | 63.0% | 59.0% | 6.35% | 63.0% | 0.0% | 59.0% | 6.35% | 63.0% | 63.0% |
-| Randomized Smoothing (std=0.12, N=100) | 39.0% | 36.0% | 46.03% | 38.0% | 42.86% | 36.0% | 46.03% | 38.0% | 38.0% |
-| Feature Denoising (3x3 hooks) | 63.0% | 62.0% | 3.17% | 63.0% | 0.0% | 62.0% | 3.17% | 63.0% | 63.0% |
+| No Defense | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
+| Median Filter (3x3) | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
+| Bit Reduction (3-bit) | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
+| JPEG Compression (Q75) | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
+| Random Noise (std=0.02) | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
+| Randomized Smoothing (std=0.12, N=100) | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
+| Feature Denoising (3x3 hooks) | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 
 
 ### Results on TRADES robust model
 
 | Defense | Clean Acc | PGD Direct Acc | PGD Direct ASR | Sparse Direct Acc | Sparse Direct ASR | PGD Transfer Acc | PGD Transfer ASR | Sparse Transfer Acc | Sparse Transfer ASR |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| No Defense | 1.0% | 1.0% | 0.0% | 1.0% | 0.0% | 1.0% | 0.0% | 1.0% | 1.0% |
-| Median Filter (3x3) | 1.0% | 1.0% | 0.0% | 1.0% | 0.0% | 1.0% | 0.0% | 1.0% | 1.0% |
-| Bit Reduction (3-bit) | 1.0% | 1.0% | 0.0% | 1.0% | 0.0% | 1.0% | 0.0% | 1.0% | 1.0% |
-| JPEG Compression (Q75) | 1.0% | 1.0% | 0.0% | 1.0% | 0.0% | 1.0% | 0.0% | 1.0% | 1.0% |
-| Random Noise (std=0.02) | 1.0% | 1.0% | 0.0% | 1.0% | 0.0% | 1.0% | 0.0% | 1.0% | 1.0% |
-| Randomized Smoothing (std=0.12, N=100) | 1.0% | 1.0% | 0.0% | 1.0% | 0.0% | 1.0% | 0.0% | 1.0% | 1.0% |
-| Feature Denoising (3x3 hooks) | 0.0% | 0.0% | 100.0% | 0.0% | 100.0% | 1.0% | 100.0% | 0.0% | 0.0% |
+| No Defense | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
+| Median Filter (3x3) | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
+| Bit Reduction (3-bit) | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
+| JPEG Compression (Q75) | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
+| Random Noise (std=0.02) | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
+| Randomized Smoothing (std=0.12, N=100) | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
+| Feature Denoising (3x3 hooks) | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 
 
 ### Results on GG-SAT ResNet-18 (GG-SAT)
@@ -54,10 +54,10 @@ This report evaluates the effectiveness of standard preprocessing, certified, an
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | No Defense | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | Median Filter (3x3) | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
-| Bit Reduction (3-bit) | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 1.0% | 0.0% | 0.0% | 0.0% |
+| Bit Reduction (3-bit) | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | JPEG Compression (Q75) | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | Random Noise (std=0.02) | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | Randomized Smoothing (std=0.12, N=100) | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
-| Feature Denoising (3x3 hooks) | 1.0% | 1.0% | 0.0% | 1.0% | 0.0% | 1.0% | 0.0% | 1.0% | 1.0% |
+| Feature Denoising (3x3 hooks) | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 
 
