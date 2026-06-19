@@ -4,6 +4,7 @@ from torch.utils.data import DataLoader
 import os
 import sys
 import argparse
+import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
@@ -113,8 +114,7 @@ def run_evaluation(num_batches=4, batch_size=128):
             "Sparse (k=0.5) Acc": f"{np.mean(results[name]['Sparse (k=0.5)'])*100:.2f}%"
         }
         summary_rows.append(row)
-        
-    import numpy as np
+
     df = pd.DataFrame(summary_rows)
     print(df.to_string(index=False))
     print(f"==========================================================================")
@@ -144,6 +144,5 @@ if __name__ == "__main__":
     parser.add_argument("--batches", type=int, default=4, help="Number of batches to evaluate")
     parser.add_argument("--batch_size", type=int, default=128, help="Batch size")
     args = parser.parse_args()
-    
-    import numpy as np
+
     run_evaluation(num_batches=args.batches, batch_size=args.batch_size)

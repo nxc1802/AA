@@ -176,7 +176,7 @@ def run_defense_benchmark(dataset='cifar10', num_batches=2, batch_size=32):
                     "PGD Transfer Acc": acc_pgd_t,
                     "PGD Transfer ASR": asr_pgd_t,
                     "Sparse Transfer Acc": acc_sparse_t,
-                    "Sparse Transfer ASR": acc_sparse_t
+                    "Sparse Transfer ASR": asr_sparse_t
                 })
 
     # 5. Save results to dataset-specific results folders
