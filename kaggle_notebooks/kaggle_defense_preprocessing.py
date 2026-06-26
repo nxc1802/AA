@@ -308,7 +308,7 @@ defenses = {
     "JPEG Compression (Q75)": JPEGCompressionDefense(quality=75),
     "Random Noise (std=0.02)": RandomNoiseDefense(std=0.02),
     "Randomized Smoothing": RandomizedSmoothingModel(base_model, sigma=0.12, N=50),
-    "Feature Denoising": FeatureDenoisingWrapper(base_model, kernel_size=3)
+    "Feature Denoising": None
 }
 
 print("\nEvaluating all defenses...")
@@ -317,7 +317,7 @@ for name, defense in defenses.items():
     print(f"Running evaluation for: {name}")
     # Feature Denoising wrapper needs special handling as it registers internal hooks
     if name == "Feature Denoising":
-        # FeatureDenoisingWrapper wraps the model itself, so we call it directly
+        defense = FeatureDenoisingWrapper(base_model, kernel_size=3)
         correct = 0
         total = 0
         batch_size = 64

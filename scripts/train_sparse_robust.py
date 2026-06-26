@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torch.nn.functional as F
 from torch.utils.data import DataLoader, Subset
 from torchvision import datasets, transforms
 import os
@@ -20,6 +21,40 @@ sys.path.append(workspace_dir)
 from src.attacks.topk_pgd import topk_pgd_attack
 from src.utils.metrics import get_metrics
 
+# Custom EMA Class for Weight Averaging
+class EMA:
+    def __init__(self, model, decay=0.999):
+        self.model = model
+        self.decay = decay
+        self.shadow = {}
+        self.backup = {}
+        self.register()
+
+    def register(self):
+        for name, param in self.model.named_parameters():
+            if param.requires_grad:
+                self.shadow[name] = param.data.clone()
+
+    def update(self):
+        for name, param in self.model.named_parameters():
+            if param.requires_grad:
+                assert name in self.shadow
+                new_average = (1.0 - self.decay) * param.data + self.decay * self.shadow[name]
+                self.shadow[name].copy_(new_average)
+
+    def apply_shadow(self):
+        for name, param in self.model.named_parameters():
+            if param.requires_grad:
+                self.backup[name] = param.data.clone()
+                param.data.copy_(self.shadow[name])
+
+    def restore(self):
+        for name, param in self.model.named_parameters():
+            if param.requires_grad:
+                assert name in self.backup
+                param.data.copy_(self.backup[name])
+        self.backup = {}
+
 def set_seed(seed):
     random.seed(seed)
     np.random.seed(seed)
@@ -35,6 +70,11 @@ def main():
     parser.add_argument("--k_max", type=float, default=0.7, help="Maximum k-ratio for dynamic randomized masking")
     parser.add_argument("--pure", action="store_true", help="Use purely adversarial training instead of mixed clean+adv loss")
     parser.add_argument("--beta", type=float, default=0.5, help="Weight factor for adversarial loss in mixed training")
+    parser.add_argument("--use_trades", action="store_true", help="Use TRADES loss instead of standard cross entropy loss")
+    parser.add_argument("--trades_beta", type=float, default=6.0, help="TRADES trade-off parameter (1/lambda)")
+    parser.add_argument("--use_ema", action="store_true", help="Use Exponential Moving Average (EMA) of model weights for validation/saving")
+    parser.add_argument("--ema_decay", type=float, default=0.999, help="Decay rate for EMA weights")
+    parser.add_argument("--attack_iters", type=int, default=10, help="Number of PGD iterations for inner loop attack")
     parser.add_argument("--lr", type=float, default=0.1, help="Initial learning rate")
     parser.add_argument("--weight_decay", type=float, default=5e-4, help="Weight decay for SGD")
     parser.add_argument("--val_size", type=int, default=512, help="Number of test samples to use for validation each epoch")
@@ -83,10 +123,16 @@ def main():
     model.maxpool = nn.Identity()
     model = model.to(device)
 
+    # Initialize EMA helper if active
+    if args.use_ema:
+        ema_helper = EMA(model, decay=args.ema_decay)
+        print(f"EMA helper initialized with decay: {args.ema_decay}")
+
     # 3. Optimizer & Scheduler
     optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
     criterion = nn.CrossEntropyLoss()
+    criterion_kl = nn.KLDivLoss(reduction='batchmean')
 
     # 4. Checkpoint Directories
     models_dir = os.path.join(workspace_dir, 'models', 'cifar10', 'Linf')
@@ -102,19 +148,22 @@ def main():
         epoch_loss = 0.0
         start_time = time.time()
         
+        # Calculate dynamic shifting k_min lower bound to prevent under-sparsification early in training
+        progress = epoch / args.epochs
+        current_k_min = args.k_min + (args.k_max - args.k_min) * 0.5 * progress
+        
         for batch_idx, (images, labels) in enumerate(train_loader):
             images, labels = images.to(device), labels.to(device)
             
-            # Select random k_ratio for this batch
-            batch_k_ratio = random.uniform(args.k_min, args.k_max)
+            # Select random k_ratio for this batch using dynamic schedule
+            batch_k_ratio = random.uniform(current_k_min, args.k_max)
             
             # 1) Generate Sparse Adversarial Perturbations (Inner maximization)
-            # Use 5-step Top-K PGD attack to speed up training
             model.eval() # Disable dropout/batchnorm during attack generation
             adv_images = topk_pgd_attack(
                 model, images, labels, 
                 eps=8/255, alpha=2/255, 
-                iters=5, k_ratio=batch_k_ratio, 
+                iters=args.attack_iters, k_ratio=batch_k_ratio, 
                 dynamic=True, return_history=False
             )
             adv_images = adv_images.detach() # Cut gradient tracking
@@ -127,6 +176,13 @@ def main():
                 # Purely Adversarial Training
                 outputs_adv = model(adv_images)
                 loss = criterion(outputs_adv, labels)
+            elif args.use_trades:
+                # TRADES Loss optimization (CE(clean) + Beta * KL(clean || adv))
+                outputs_clean = model(images)
+                outputs_adv = model(adv_images)
+                loss_clean = criterion(outputs_clean, labels)
+                loss_kl = criterion_kl(F.log_softmax(outputs_adv, dim=-1), F.softmax(outputs_clean, dim=-1))
+                loss = loss_clean + args.trades_beta * loss_kl
             else:
                 # Mixed Training (Clean + Adv)
                 outputs_clean = model(images)
@@ -138,6 +194,10 @@ def main():
             loss.backward()
             optimizer.step()
             
+            # Update EMA weights
+            if args.use_ema:
+                ema_helper.update()
+            
             epoch_loss += loss.item() * labels.size(0)
             
         scheduler.step()
@@ -145,6 +205,10 @@ def main():
         avg_loss = epoch_loss / len(train_loader.dataset)
         
         # 5. Fast Evaluation loop after epoch
+        # Apply EMA weights if active
+        if args.use_ema:
+            ema_helper.apply_shadow()
+            
         model.eval()
         correct_clean = 0
         correct_robust = 0
@@ -191,6 +255,10 @@ def main():
             best_clean_acc = val_clean_acc
             print(f"====> New best checkpoint saved with Robust Acc {val_robust_acc*100:.2f}% (Clean {val_clean_acc*100:.2f}%)!")
             torch.save(model.state_dict(), best_checkpoint_path)
+            
+        # Restore normal weights for next epoch's training
+        if args.use_ema:
+            ema_helper.restore()
 
     print("==================================================")
     print("Training finished successfully!")
