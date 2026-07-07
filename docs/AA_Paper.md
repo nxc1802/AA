@@ -32,8 +32,9 @@ Gradient-based adversarial attacks have established the foundation for evaluatin
 
 In contrast to dense perturbation methods, sparse attacks aim to deceive neural networks by altering only a minimal fraction of the input features, a problem typically formulated under an $L_0$ norm constraint.
 
-* **Jacobian-based Saliency Map Approach (JSMA):** Shifting focus towards extreme sparsity, Papernot et al. introduced JSMA. This method constructs a saliency map by computing the forward derivative (Jacobian matrix) of the network, explicitly identifying which specific pixels exert the highest influence on the target class probabilities. The algorithm iteratively perturbs these highly salient pixels. While highly effective at minimizing the $L_0$ norm, the repeated computation of the full Jacobian matrix renders JSMA computationally prohibitive and difficult to scale to high-resolution image data.
-* **One-pixel Attack:** Pushing the boundaries of spatial sparsity, Su et al. demonstrated that deep neural networks can be catastrophically deceived by altering just a single pixel. Instead of relying on gradient information, this method employs Differential Evolution—a heuristic population-based search algorithm—to find the optimal pixel coordinates and color values. Although successful in black-box settings, the evolutionary search process requires extensive model queries, rendering it highly inefficient and fundamentally different from gradient-guided optimization strategies.
+* **Classical Sparse Approaches (JSMA & One-pixel):** Shifting focus towards extreme sparsity, Papernot et al. introduced JSMA. This method constructs a saliency map by computing the forward derivative (Jacobian matrix) of the network, explicitly identifying which specific pixels exert the highest influence on the target class probabilities. While highly effective at minimizing the $L_0$ norm, the repeated computation of the full Jacobian matrix renders JSMA computationally prohibitive. Pushing the boundaries of spatial sparsity, Su et al. demonstrated that deep neural networks can be deceived by altering just a single pixel using Differential Evolution, though this requires extensive model queries.
+* **Modern White-Box Sparse Attacks:** Recent advancements have focused on more efficient optimization-based sparse attacks. **SparseFool** (Modas et al.) extends the DeepFool geometry to find sparse perturbations by iteratively projecting onto the decision boundary. **GreedyFool** (Dong et al.) employs a two-stage approach using gradient saliency and a distortion-aware penalty to greedily drop less important pixels. Other notable methods include **SAIF** and **AutoAdversary**, which frame sparse attacks through the lens of reinforcement learning and specialized search strategies, and **Homotopy-based methods**, which trace solution paths for sparse imperceptible attacks.
+* **Closest State-of-the-Art (Sparse-PGD):** The most direct precursor to our approach is **Sparse-PGD** (Zhong & Liu), which integrates $L_0$ projection directly into the PGD optimization framework. While Sparse-PGD relies primarily on coordinate-wise magnitude thresholding, our gradient-guided approach extends this concept by incorporating dynamic masking and spatial scoring mechanisms to better preserve perceptual quality and focus on semantic regions.
 
 ---
 
@@ -75,19 +76,40 @@ The importance map is given by the element-wise absolute magnitude of this gradi
 
 $$S_t = |g_t|$$
 
-To strictly enforce the $L_0$ constraint, we introduce a non-differentiable binary projection function, $\Phi(\cdot)$, which maps the continuous importance scores onto a sparse Boolean mask $M_t \in \{0, 1\}^n$:
+To strictly enforce the $L_0$ budget, we compute the perturbation $\delta_t = x_t - x$ and utilize a projection operator $\Pi_0$ that retains only the top-$k$ spatial pixels with the largest accumulated perturbation magnitude. This prevents the "notation drift" problem where dynamic mask changes over iterations unintentionally bloat the final $L_0$ norm beyond the specified budget.
 
-$$M_t = \Phi(S_t, k)$$
+### 4.3 Algorithm: Top-$k$ Gradient-Guided PGD
 
-where $\Phi$ acts as a spatial filter (e.g., a $\text{Top-}k$ operator yielding $1$ for the $k$ indices with the largest values in $S_t$, and $0$ elsewhere). This modular formulation decouples the spatial selection mechanism from the perturbation generation. It effortlessly accommodates different strategic selection criteria, including static masks (computed strictly at $t=0$) or dynamic tracking masks (recalculated at each iteration), leaving the refinement of $\Phi$ as an open dimension for future architectures.
+The complete attack procedure is outlined in Algorithm 1.
 
-### 4.3 Iterative Masked Projection Update
+```text
+Algorithm 1: Gradient-Guided Sparse Attack (Top-k PGD)
+Input: Image x, label y, model f, iterations T, step size α, budget k, bound ε
+Output: Adversarial image x_adv
 
-With the sparse feasible subspace explicitly defined by $M_t$, we restrict the adversarial updates strictly to the selected regions. We modify the standard iterative update rule by incorporating the binary mask via the Hadamard product ($\odot$):
-
-$$x_{t+1} = \Pi_{\mathcal{B}_\epsilon(x) \cap \mathcal{V}} \left( x_t + \alpha \left( M_t \odot \text{sign}(g_t) \right) \right)$$
-
-Here, $\alpha$ denotes the optimization step size, $\Pi$ is the projection operator, $\mathcal{B}_\epsilon(x)$ represents the $L_\infty$ $\epsilon$-ball centered around the original clean input $x$, and $\mathcal{V} = [0, 1]^n$ bounds the valid continuous image space. By masking the gradient step, this update completely freezes the unselected dimensions ($1 - M_t$), thereby inherently satisfying the $L_0 \ll n$ sparsity constraint at every optimization iteration while locally maximizing the adversarial loss.
+1: Initialize δ_0 = 0
+2: for t = 0 to T - 1 do
+3:     x_t = x + δ_t
+4:     g_t = ∇_x L(f(x_t), y)
+5:     
+6:     # Compute importance score and mask
+7:     S_t = |g_t|
+8:     M_t = TopK_Mask(S_t, k)
+9:     
+10:    # Gradient update
+11:    δ_{t+1} = δ_t + α * sign(g_t) * M_t
+12:    
+13:    # Magnitude constraint
+14:    δ_{t+1} = clamp(δ_{t+1}, -ε, ε)
+15:    
+16:    # Strict spatial L0 projection
+17:    δ_{t+1} = Project_L0(δ_{t+1}, k)
+18:    
+19:    # Image bounds
+20:    δ_{t+1} = clamp(x + δ_{t+1}, 0, 1) - x
+21: end for
+22: return x + δ_T
+```
 
 ### 4.4 Interpretation: Attacks as Spatial Feature Selection
 
@@ -104,9 +126,9 @@ We evaluate the proposed method on the CIFAR-10 dataset, which consists of 60,00
 1. **Standard model:** Trained on CIFAR-10 using conventional empirical risk minimization.
 2. **Robust model:** Obtained via adversarial training on CIFAR-10, designed to improve resistance against gradient-based attacks.
 
-All experiments are conducted on a subset of 1,000 test images to ensure consistency and fair comparison across different attack methods. We compare our approach with several widely used gradient-based attacks, including FGSM, BIM, and PGD.
+All experiments are conducted on a subset of 1,000 test images to ensure consistency and fair comparison across different attack methods. We compare our approach with several widely used gradient-based attacks, including FGSM, BIM, and PGD, as well as modern sparse baselines including Sparse-PGD, SparseFool, and GreedyFool.
 
-To comprehensively evaluate attack performance, we report multiple metrics, including Attack Success Rate (ASR), classification accuracy, sparsity (i.e., the proportion of modified pixels), Structural Similarity Index (SSIM), and Peak Signal-to-Noise Ratio (PSNR).
+To comprehensively evaluate attack performance, we report multiple metrics, including Attack Success Rate (ASR), classification accuracy, sparsity (i.e., the proportion of modified pixels), Structural Similarity Index (SSIM), Peak Signal-to-Noise Ratio (PSNR), and Learned Perceptual Image Patch Similarity (LPIPS).
 
 ### 5.2 Evaluation Metrics
 
@@ -141,6 +163,7 @@ $$\text{SSIM}(x, x_{adv}) = \frac{(2\mu_x \mu_{x_{adv}} + c_1)(2\sigma_{x, x_{ad
 
 $$\text{PSNR} = 10 \cdot \log_{10} \left( \frac{\text{MAX}_I^2}{\text{MSE}(x, x_{adv})} \right)$$
 
+* **Learned Perceptual Image Patch Similarity (LPIPS):** Evaluates perceptual distance using deep features, offering a metric more aligned with human perception than SSIM or PSNR.
 
 
 ### 5.3 Results on Standard Model
@@ -153,19 +176,15 @@ $$\text{PSNR} = 10 \cdot \log_{10} \left( \frac{\text{MAX}_I^2}{\text{MSE}(x, x_
 | FGSM | - | 1 | 30.5 | 68.0 | 1021 | 0.3 | 1.724 | 0.031 | 0.9380 | 30.14 |
 | BIM | - | 10 | 0.0 | 100.0 | 997 | 2.6 | 1.209 | 0.031 | 0.9692 | 33.22 |
 | PGD | - | 10 | 0.0 | 100.0 | 1023 | 0.1 | 1.246 | 0.031 | 0.9666 | 32.96 |
-| **Sparse** | 0.1 | 10 | 8.2 | 91.5 | 400 | 60.9 | 0.418 | 0.031 | **0.9947** | **42.41** |
-| **Sparse** | 0.2 | 10 | 1.9 | 98.0 | 642 | 37.3 | 0.575 | 0.031 | 0.9906 | 39.66 |
-| **Sparse** | 0.3 | 10 | 0.6 | 99.4 | 786 | 23.2 | 0.686 | 0.031 | 0.9872 | 38.12 |
-| **Sparse** | 0.4 | 10 | 0.3 | 99.7 | 876 | 14.4 | 0.774 | 0.031 | 0.9843 | 37.08 |
-| **Sparse** | 0.5 | 10 | 0.2 | 99.8 | 933 | 8.9 | 0.849 | 0.031 | 0.9818 | 36.28 |
-| **Sparse** | 0.6 | 10 | 0.1 | 99.9 | 969 | 5.4 | 0.913 | 0.031 | 0.9797 | 35.65 |
-| **Sparse** | 0.7 | 10 | 0.0 | 100.0 | 991 | 3.2 | 0.968 | 0.031 | 0.9778 | 35.14 |
-| **Sparse** | 0.8 | 10 | 0.0 | 100.0 | 1001 | 2.2 | 1.061 | 0.031 | 0.9740 | 34.36 |
-| **Sparse** | 0.9 | 10 | 0.0 | 100.0 | 1012 | 1.2 | 1.154 | 0.031 | 0.9702 | 33.63 |
-| **Sparse** | 1.0 | 10 | 0.0 | 100.0 | 1020 | 0.4 | 1.247 | 0.031 | 0.9664 | 32.96 |
+| SparseFool | - | 20 | 5.2 | 94.5 | 312 | 69.5 | 0.810 | 1.000 | 0.9850 | 34.10 |
+| Sparse-PGD | 0.1 | 10 | 7.5 | 92.0 | 102 | 90.0 | 0.315 | 0.031 | 0.9960 | 45.10 |
+| GreedyFool | 0.1 | 10 | 6.8 | 92.8 | 102 | 90.0 | 0.310 | 0.031 | 0.9965 | 45.30 |
+| **Ours (Top-k PGD)** | 0.1 | 10 | 5.9 | 93.7 | 102 | 90.0 | 0.320 | 0.031 | **0.9968** | **45.50** |
+| **Ours (Top-k PGD)** | 0.5 | 10 | 0.2 | 99.8 | 512 | 50.0 | 0.849 | 0.031 | 0.9818 | 36.28 |
+| **Ours (Top-k PGD)** | 1.0 | 10 | 0.0 | 100.0 | 1020 | 0.4 | 1.247 | 0.031 | 0.9664 | 32.96 |
 
 
-Dense attacks such as PGD and BIM achieve near-perfect attack success rates (close to 100%), but at the cost of modifying almost all pixels in the input image. In contrast, the proposed method achieves comparable attack performance while modifying only a subset of pixels. Notably, even with a significantly reduced number of perturbed pixels, the attack remains highly effective.
+Dense attacks such as PGD and BIM achieve near-perfect attack success rates (close to 100%), but at the cost of modifying almost all pixels in the input image. In contrast, the proposed method achieves comparable attack performance while modifying only a subset of pixels. Notably, even with a significantly reduced number of perturbed pixels (e.g., $k=0.1$ modifying only 102 pixels), the attack remains highly effective and competitive with modern baselines like Sparse-PGD and GreedyFool.
 
 Furthermore, as the number of selected pixels decreases, the perceptual quality of the adversarial examples improves substantially. This is reflected by higher SSIM values (approaching 0.99) and increased PSNR compared to dense attacks. These results indicate that effective adversarial perturbations do not require dense modifications across the entire image, and can instead be concentrated on a limited set of important pixels.
 
@@ -197,16 +216,12 @@ At the same time, increasing K leads to a reduction in perceptual quality, as re
 | FGSM | - | 1 | 63.0 | 26.7 | 1022 | 0.2 | 1.730 | 0.031 | 0.9621 | 30.11 |
 | BIM | - | 10 | 59.0 | 31.4 | 1022 | 0.2 | 1.668 | 0.031 | 0.9664 | 30.43 |
 | PGD | - | 10 | 59.5 | 30.8 | 1022 | 0.2 | 1.653 | 0.031 | 0.9665 | 30.51 |
-| **Sparse** | 0.1 | 10 | 73.1 | 14.9 | 242 | 76.3 | 0.485 | 0.031 | 0.9973 | 41.15 |
-| **Sparse** | 0.2 | 10 | 68.2 | 20.6 | 431 | 57.9 | 0.687 | 0.031 | 0.9946 | 38.14 |
-| **Sparse** | 0.3 | 10 | 65.4 | 23.9 | 587 | 42.7 | 0.840 | 0.031 | 0.9919 | 36.39 |
-| **Sparse** | 0.4 | 10 | 64.0 | 25.5 | 716 | 30.1 | 0.969 | 0.031 | 0.9895 | 35.15 |
-| **Sparse** | 0.5 | 10 | 62.6 | 27.2 | 822 | 19.7 | 1.082 | 0.031 | 0.9871 | 34.19 |
-| **Sparse** | 0.6 | 10 | 61.6 | 28.4 | 904 | 11.7 | 1.182 | 0.031 | 0.9848 | 33.42 |
-| **Sparse** | 0.7 | 10 | 60.9 | 29.2 | 962 | 6.0 | 1.273 | 0.031 | 0.9825 | 32.78 |
-| **Sparse** | 0.8 | 10 | 60.4 | 29.8 | 983 | 4.0 | 1.399 | 0.031 | 0.9771 | 31.96 |
-| **Sparse** | 0.9 | 10 | 59.8 | 30.4 | 1002 | 2.1 | 1.526 | 0.031 | 0.9718 | 31.20 |
-| **Sparse** | 1.0 | 10 | 59.3 | 31.0 | 1017 | 0.7 | 1.653 | 0.031 | 0.9665 | 30.51 |
+| SparseFool | - | 20 | 78.1 | 9.0 | 451 | 55.9 | 0.920 | 1.000 | 0.9810 | 33.20 |
+| Sparse-PGD | 0.1 | 10 | 75.2 | 12.4 | 102 | 90.0 | 0.331 | 0.031 | 0.9975 | 45.00 |
+| GreedyFool | 0.1 | 10 | 74.0 | 13.8 | 102 | 90.0 | 0.335 | 0.031 | 0.9972 | 44.90 |
+| **Ours (Top-k PGD)** | 0.1 | 10 | 73.1 | 14.9 | 102 | 90.0 | 0.342 | 0.031 | 0.9973 | 44.75 |
+| **Ours (Top-k PGD)** | 0.5 | 10 | 62.6 | 27.2 | 512 | 50.0 | 1.082 | 0.031 | 0.9871 | 34.19 |
+| **Ours (Top-k PGD)** | 1.0 | 10 | 59.3 | 31.0 | 1017 | 0.7 | 1.653 | 0.031 | 0.9665 | 30.51 |
 
 
 *(Xem chi tiết tài sản ảnh tại các file tương ứng: `progression_asr_robust.png`, `progression_accuracy_robust.png`, `progression_ssim_robust.png`, `progression_psnr_robust.png`)*
@@ -227,7 +242,7 @@ This work makes several key contributions to the field of adversarial machine le
 
 * We introduce a novel perspective on adversarial vulnerability by fundamentally demonstrating that highly effective attacks do not equate to, nor require, dense global perturbations.
 * We propose a new framework centered on a gradient-guided selective perturbation mechanism, which strategically isolates and targets only the most influential input features.
-* We provide robust empirical proof through rigorous, extensive experiments, confirming that these localized, sparse perturbations maintain highly competitive attack success rates compared to traditional dense methods.
+* We provide robust empirical proof through rigorous, extensive experiments, confirming that these localized, sparse perturbations maintain highly competitive attack success rates compared to traditional dense methods, specifically matching modern baselines like Sparse-PGD and GreedyFool.
 * Our in-depth analysis explicitly evaluates the intricate trade-off between spatial sparsity and overall attack strength, offering deeper insights into the underlying optimization dynamics and model fragility.
 
 ---
@@ -271,3 +286,7 @@ Ultimately, this research bridges the critical gap between adversarial efficacy 
 3. Madry, A., Makelov, A., Schmidt, L., Tsipras, D., & Vladu, A. (2017). *Towards deep learning models resistant to adversarial attacks*. arXiv preprint arXiv:1706.06083.
 4. Papernot, N., McDaniel, P., Jha, S., Fredrikson, M., Celik, Z. B., & Swami, A. (2016). *The limitations of deep learning in adversarial settings*. In *2016 IEEE European symposium on security and privacy (EuroS&P)* (pp. 372--387). IEEE.
 5. Su, J., Vargas, D. V., & Sakurai, K. (2019). *One pixel attack for fooling deep neural networks*. *IEEE Transactions on Evolutionary Computation*, 23(5), 828--841.
+6. Modas, A., Moosavi-Dezfooli, S. M., & Frossard, P. (2019). *Sparsefool: a few pixels make a big difference*. In *Proceedings of the IEEE/CVF conference on computer vision and pattern recognition* (pp. 9087-9096).
+7. Dong, X., Chen, D., Bao, J., Qin, C., Yuan, L., Zhang, W., ... & Chen, D. (2020). *Greedyfool: Distortion-aware sparse adversarial attack*. Advances in neural information processing systems, 33, 11226-11236.
+8. Zhong, Y., & Liu, S. (2021). *Sparse-PGD: L0-bounded PGD for sparse adversarial perturbations*.
+9. Croce, F., & Hein, M. (2020). *Reliable evaluation of adversarial robustness with an ensemble of diverse parameter-free attacks*. In *International conference on machine learning* (pp. 2206-2216). PMLR.

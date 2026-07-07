@@ -45,7 +45,7 @@ def make_paper_assets(csv_path='results/final_results.csv', output_dir='results/
         'Sparse (k=1.0)': '#4895ef'
     }
     
-    metrics = ['ASR', 'Accuracy', 'SSIM', 'PSNR']
+    metrics = ['ASR', 'Accuracy', 'SSIM', 'PSNR', 'LPIPS']
     models = df['Model'].unique()
     
     # 1. PROGRESSION PLOTS (ASR, Accuracy, SSIM, PSNR vs Iteration)
@@ -136,10 +136,11 @@ def make_paper_assets(csv_path='results/final_results.csv', output_dir='results/
         summary['ASR'] = (summary['ASR'] * 100).round(2).astype(str) + r'\%'
         summary['Sparsity'] = (summary['Sparsity'] * 100).round(1).astype(str) + r'\%'
         summary['SSIM'] = summary['SSIM'].round(4)
+        summary['LPIPS'] = summary['LPIPS'].round(4)
         summary['PSNR'] = summary['PSNR'].round(2).replace(float('inf'), r'\infty')
         
         # Filter unwanted columns
-        cols_to_keep = ['Attack', 'K-Ratio', 'Accuracy', 'ASR', 'L0', 'Sparsity', 'L2', 'Linf', 'SSIM', 'PSNR']
+        cols_to_keep = ['Attack', 'K-Ratio', 'Accuracy', 'ASR', 'L0', 'Sparsity', 'L2', 'Linf', 'SSIM', 'PSNR', 'LPIPS']
         summary = summary[cols_to_keep]
         
         tex_path = os.path.join(output_dir, f'table_{mtype.lower()}.tex')

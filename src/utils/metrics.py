@@ -1,5 +1,16 @@
 import torch
 import numpy as np
+import lpips
+
+# Initialize LPIPS model globally to avoid reloading
+_loss_fn_alex = None
+
+def get_lpips_model(device):
+    global _loss_fn_alex
+    if _loss_fn_alex is None:
+        _loss_fn_alex = lpips.LPIPS(net='alex').to(device)
+        _loss_fn_alex.eval()
+    return _loss_fn_alex
 
 def calculate_psnr(img1, img2):
     mse = torch.mean((img1 - img2) ** 2)
@@ -8,8 +19,6 @@ def calculate_psnr(img1, img2):
     return (20 * torch.log10(1.0 / torch.sqrt(mse))).item()
 
 def calculate_ssim(img1, img2, window_size=11):
-    # Simple SSIM implementation for PyTorch
-    # Based on: https://github.com/Po-Hsun-Su/pytorch-ssim
     import torch.nn.functional as F
     
     def gaussian(window_size, sigma):
@@ -42,35 +51,42 @@ def calculate_ssim(img1, img2, window_size=11):
     ssim_map = ((2 * mu1_mu2 + C1) * (2 * sigma12 + C2)) / ((mu1_sq + mu2_sq + C1) * (sigma1_sq + sigma2_sq + C2))
     return ssim_map.mean().item()
 
+def calculate_lpips(img1, img2, device):
+    """
+    Calculate LPIPS score between two image batches.
+    img1, img2: [B, C, H, W] in [0, 1]
+    LPIPS expects [-1, 1] range.
+    """
+    img1_scaled = img1 * 2.0 - 1.0
+    img2_scaled = img2 * 2.0 - 1.0
+    loss_fn = get_lpips_model(device)
+    with torch.no_grad():
+        dist = loss_fn(img1_scaled, img2_scaled)
+    return dist.mean().item()
+
 def get_metrics(model, images, labels, adv_images, device):
     """
     Calculate comprehensive metrics for a batch of adversarial images.
-    Returns: Acc, ASR, L0, L2, Linf, SSIM, PSNR
+    Returns: Acc, ASR, L0, L2, Linf, SSIM, PSNR, LPIPS
     """
     model.eval()
     with torch.no_grad():
-        # Correctly classified images in clean batch
         outputs_clean = model(images.to(device))
         _, pred_clean = torch.max(outputs_clean, 1)
         correct_idx = (pred_clean == labels.to(device))
         
-        # Predicted labels for adversarial images
         outputs_adv = model(adv_images.to(device))
         _, pred_adv = torch.max(outputs_adv, 1)
         
-        # 1. Adversarial Accuracy
         acc_adv = (pred_adv == labels.to(device)).float().mean().item()
         
-        # 2. ASR (Attack Success Rate)
         if correct_idx.sum() > 0:
             asr = (pred_adv[correct_idx] != labels.to(device)[correct_idx]).float().mean().item()
         else:
             asr = 0.0
             
-        # 3. Norms
         diff = (adv_images - images).abs()
-        # L0: Number of changed pixels per image (avg across batch)
-        # Pixel is changed if any channel difference > 1e-4
+        # L0: spatial pixels modified
         l0_per_image = (diff.max(dim=1)[0] > 1e-4).float().view(diff.size(0), -1).sum(dim=1)
         avg_l0 = l0_per_image.mean().item()
         
@@ -78,11 +94,10 @@ def get_metrics(model, images, labels, adv_images, device):
         l2_norm = torch.norm(diff_flat, p=2, dim=1).mean().item()
         linf_norm = torch.norm(diff_flat, p=float('inf'), dim=1).mean().item()
         
-        # 4. Image Quality
         psnr = calculate_psnr(images, adv_images)
         ssim = calculate_ssim(images, adv_images)
+        lpips_score = calculate_lpips(images, adv_images, device)
         
-        # 5. Sparsity (ratio of pixels NOT changed)
         num_pixels = images.size(2) * images.size(3)
         sparsity = 1.0 - (avg_l0 / num_pixels)
         
@@ -94,5 +109,6 @@ def get_metrics(model, images, labels, adv_images, device):
         'l2': l2_norm,
         'linf': linf_norm,
         'psnr': psnr,
-        'ssim': ssim
+        'ssim': ssim,
+        'lpips': lpips_score
     }

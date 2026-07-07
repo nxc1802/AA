@@ -27,19 +27,22 @@ from src.attacks.fgsm import fgsm_attack
 from src.attacks.bim import bim_attack
 from src.attacks.pgd import pgd_attack
 from src.attacks.topk_pgd import topk_pgd_attack
-from src.utils.metrics import get_metrics, calculate_psnr, calculate_ssim
+from src.attacks.sparse_pgd import sparse_pgd_attack
+from src.attacks.sparsefool import sparsefool_attack
+from src.attacks.greedy_fool import greedy_fool_attack
+from src.utils.metrics import get_metrics, calculate_psnr, calculate_ssim, calculate_lpips
 
-def run_final_benchmark(num_batches=10, batch_size=128):
+def run_final_benchmark(num_batches=1, batch_size=10):
     device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
     print(f"Using device: {device}")
     
     datasets_list = ['cifar10']
     models_type = ['Standard', 'Robust']
-    k_ratios = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+    k_ratios = [0.1, 0.5, 1.0] # reduced for quick testing
     
     os.makedirs('results', exist_ok=True)
     csv_file = 'results/final_results.csv'
-    cols = ['Dataset', 'Model', 'Attack', 'K-Ratio', 'Dynamic', 'Iteration', 'Accuracy', 'ASR', 'L0', 'Sparsity', 'L2', 'Linf', 'SSIM', 'PSNR', 'Time(s)']
+    cols = ['Dataset', 'Model', 'Attack', 'K-Ratio', 'Dynamic', 'Iteration', 'Accuracy', 'ASR', 'L0', 'Sparsity', 'L2', 'Linf', 'SSIM', 'PSNR', 'LPIPS', 'Time(s)']
     all_rows = []
     
     for dname in datasets_list:
@@ -84,30 +87,42 @@ def run_final_benchmark(num_batches=10, batch_size=128):
                         linf = torch.norm(diff_flat, p=float('inf'), dim=1).mean().item()
                         psnr = calculate_psnr(images, adv_images)
                         ssim = calculate_ssim(images, adv_images)
-                        all_rows.append([dname, mtype, attack_name, k, dyn, step, acc, asr, l0, sparsity, l2, linf, ssim, psnr, duration])
+                        lpips = calculate_lpips(images, adv_images, device)
+                        all_rows.append([dname, mtype, attack_name, k, dyn, step, acc, asr, l0, sparsity, l2, linf, ssim, psnr, lpips, duration])
 
                 # 1. Clean
-                log_metrics(images, 'Clean', 0, False, 0)
+                start_time = time.time()
+                log_metrics(images, 'Clean', 0, False, 0, time.time() - start_time)
                 
-                # 2. FGSM
+                # 2. Dense Attacks
+                start_time = time.time()
                 adv_fgsm = fgsm_attack(model, images, labels, eps=8/255)
-                log_metrics(adv_fgsm, 'FGSM', 0, False, 1)
+                log_metrics(adv_fgsm, 'FGSM', 0, False, 1, time.time() - start_time)
                 
-                # 3. BIM (History)
-                _, history = bim_attack(model, images, labels, eps=8/255, alpha=2/255, iters=10, return_history=True)
-                for t, adv_img in enumerate(history):
-                    log_metrics(adv_img, 'BIM', 0, False, t+1)
-                
-                # 4. PGD (History)
+                start_time = time.time()
                 _, history = pgd_attack(model, images, labels, eps=8/255, alpha=2/255, iters=10, return_history=True)
                 for t, adv_img in enumerate(history):
-                    log_metrics(adv_img, 'PGD', 0, False, t+1)
+                    log_metrics(adv_img, 'PGD', 0, False, t+1, time.time() - start_time)
                 
-                # 5. Sparse
+                # 3. Sparse SOTA Baselines
+                start_time = time.time()
+                adv_sparsefool = sparsefool_attack(model, images, labels, max_iters=20)
+                log_metrics(adv_sparsefool, 'SparseFool', 0, False, 20, time.time() - start_time)
+
                 for k in k_ratios:
+                    start_time = time.time()
+                    adv_sparse_pgd = sparse_pgd_attack(model, images, labels, eps=8/255, alpha=2/255, iters=10, k_ratio=k)
+                    log_metrics(adv_sparse_pgd, 'Sparse-PGD', k, False, 10, time.time() - start_time)
+
+                    start_time = time.time()
+                    adv_greedy = greedy_fool_attack(model, images, labels, eps=8/255, alpha=2/255, iters=10, k_ratio=k)
+                    log_metrics(adv_greedy, 'GreedyFool', k, False, 10, time.time() - start_time)
+
+                    # 4. Our Proposed Sparse Attack (Top-k PGD)
+                    start_time = time.time()
                     _, history = topk_pgd_attack(model, images, labels, eps=8/255, alpha=2/255, iters=10, k_ratio=k, dynamic=True, return_history=True)
                     for t, adv_img in enumerate(history):
-                        log_metrics(adv_img, 'Sparse', k, True, t+1)
+                        log_metrics(adv_img, 'Proposed-TopkPGD', k, True, t+1, time.time() - start_time)
                 
                 if (batch_idx + 1) % 2 == 0:
                     pd.DataFrame(all_rows, columns=cols).to_csv(csv_file, index=False)
@@ -118,8 +133,8 @@ def run_final_benchmark(num_batches=10, batch_size=128):
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--batches", type=int, default=125, help="Number of batches to evaluate")
-    parser.add_argument("--batch_size", type=int, default=8, help="Batch size")
+    parser.add_argument("--batches", type=int, default=1, help="Number of batches to evaluate")
+    parser.add_argument("--batch_size", type=int, default=10, help="Batch size")
     args = parser.parse_args()
     
     run_final_benchmark(num_batches=args.batches, batch_size=args.batch_size)

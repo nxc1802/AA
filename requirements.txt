@@ -7,3 +7,6 @@ scipy
 requests
 robustbench
 pandas
+lpips
+PyYAML
+scikit-learn

@@ -126,3 +126,77 @@ venv/bin/python3 scripts/eval_sparse_robust.py --batches NUM_BATCHES --batch_siz
 ```bash
 venv/bin/python3 scripts/eval_sparse_robust.py --batches 4 --batch_size 128
 ```
+
+---
+
+## 3. Đánh Giá Mở Rộng & Chuyên Sâu (Evaluation & Analytics)
+
+Các script trong phần này được thiết kế để đánh giá chi tiết phương thức tấn công Top-k PGD, so sánh với các baseline SOTA (SparseFool, GreedyFool) và phân tích sâu các khía cạnh của phương pháp.
+
+### 3.1 Chạy Benchmark Cuối Cùng (`run_final_bench.py`)
+
+Chạy benchmark tổng hợp tất cả các thuật toán tấn công (Clean, FGSM, PGD, BIM, Sparse-PGD, SparseFool, GreedyFool, và Proposed Top-k PGD). Đánh giá các metric nâng cao như LPIPS, SSIM, PSNR.
+
+**Cú pháp CLI:**
+```bash
+venv/bin/python3 scripts/run_final_bench.py [--batches NUM] [--batch_size SIZE]
+```
+
+**Ví dụ:**
+- *Chạy test nhanh:*
+  ```bash
+  venv/bin/python3 scripts/run_final_bench.py --batches 1 --batch_size 10
+  ```
+- *Đầu ra:* `results/final_results.csv`
+
+### 3.2 Phân Tích Thực Nghiệm Ablation (`run_ablation.py`)
+
+Thực hiện các thử nghiệm ablation để cô lập và đánh giá tầm quan trọng của cơ chế Dynamic Mask và Score EMA Smoothing trong thuật toán tấn công.
+
+**Cú pháp CLI:**
+```bash
+venv/bin/python3 scripts/run_ablation.py [--quick]
+```
+
+**Ví dụ:**
+- *Chạy kiểm tra nhanh:*
+  ```bash
+  venv/bin/python3 scripts/run_ablation.py --quick
+  ```
+- *Đầu ra:* `results/ablation/ablation_results.csv`
+
+### 3.3 Đánh Giá ASR Phân Rã Theo Lớp (`run_classwise_analysis.py`)
+
+Tính toán Attack Success Rate (ASR) phân tầng theo từng lớp ảnh cụ thể (ví dụ: máy bay, ô tô, chim, chó mèo...) để kiểm tra xem thuật toán có bị thiên lệch với một lớp cụ thể nào không.
+
+**Cú pháp CLI:**
+```bash
+venv/bin/python3 scripts/run_classwise_analysis.py [--batches NUM] [--batch_size SIZE]
+```
+
+**Ví dụ:**
+- *Chạy phân tích:*
+  ```bash
+  venv/bin/python3 scripts/run_classwise_analysis.py --batches 1 --batch_size 10
+  ```
+- *Đầu ra:* `results/classwise/classwise_asr.csv`
+
+---
+
+## 4. Trích Xuất Báo Cáo & Biểu Đồ (Paper Assets)
+
+Phần này chứa script phục vụ trực tiếp cho việc viết báo cáo và bài báo khoa học.
+
+### Sinh Biểu Đồ & Bảng LaTeX (`make_paper_assets.py`)
+
+Đọc dữ liệu từ file `results/final_results.csv` và tự động sinh ra các biểu đồ so sánh (Accuracy, ASR, SSIM, PSNR, LPIPS vs. K-Ratio/Iterations) cùng với các bảng LaTeX chuẩn định dạng bài báo.
+
+**Cú pháp CLI:**
+```bash
+venv/bin/python3 scripts/make_paper_assets.py
+```
+
+**Đầu ra:** Các file ảnh `.png` và file `.tex` được lưu tại `results/paper_assets/`.
+
+---
+**Lưu ý chung:** Toàn bộ các script đều tự động nhận diện thiết bị khả dụng (CUDA/MPS/CPU). Trước khi chạy, luôn đảm bảo môi trường ảo đã được kích hoạt thông qua lệnh `source venv/bin/activate`.
